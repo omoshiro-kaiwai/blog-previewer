@@ -7,13 +7,13 @@ const Header: React.FC = () => {
     <header className="header">
       <div className="container header-content"> {}
         <Link to="/" className="logo-link">
-          おもしろ界隈
+          ブログプレビュー用
         </Link>
         <nav className="navigation">
           <ul>
-            <li><Link to="/about">About</Link></li>
-            <li><Link to="/blogs">Blogs</Link></li>
-            <li><Link to="/contact">Contact</Link></li>
+            <li>About</li>
+            <li>Blogs</li>
+            <li>Contact</li>
           </ul>
         </nav>
       </div>
