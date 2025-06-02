@@ -1,3 +1,15 @@
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #f4f6f8; /* 明るいグレー系の背景 */
+    color: #333;
+    line-height: 1.6;
+}
+
 /* 基本的なレイアウトは HomePage.css の .home-page-container と同様 */
 .blog-post-page-container {
   display: flex;
