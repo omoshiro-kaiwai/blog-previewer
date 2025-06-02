@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom'; // useNavigate を追加
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import * as yaml from 'js-yaml';
 import ReactMarkdown from 'react-markdown';
 import './Preview.css'; // スタイルシートのパスが正しいことを確認してください
@@ -7,7 +7,7 @@ import './Preview.css'; // スタイルシートのパスが正しいことを�
 import Header from '../components/Header'; // パスが正しいことを確認してください
 import Footer from '../components/Footer'; // パスが正しいことを確認してください
 
-// 型定義 (変更なし)
+// 型定義
 interface PostFrontmatter {
     title: string;
     date: string;
@@ -29,7 +29,7 @@ interface SinglePost {
     slug: string;
 }
 
-// フロントマター解析関数 (変更なし)
+// フロントマター解析関数
 function parseFrontMatter(content: string): ParsedContent {
     const match = /^---\n([\s\S]+?)\n---/.exec(content);
     if (!match) return { data: {}, body: content };
@@ -53,7 +53,7 @@ function parseFrontMatter(content: string): ParsedContent {
 
 // --- MarkdownFileUploader 内部コンポーネント ---
 interface MarkdownFileUploaderProps {
-    onUploadSuccess: (slug: string, title?: string) => void;
+    onUploadSuccess: (slug: string) => void; // uploadedTitle を削除
 }
 
 const MarkdownFileUploader: React.FC<MarkdownFileUploaderProps> = ({ onUploadSuccess }) => {
@@ -77,11 +77,10 @@ const MarkdownFileUploader: React.FC<MarkdownFileUploaderProps> = ({ onUploadSuc
         const reader = new FileReader();
         reader.onload = (e) => {
             const content = e.target?.result as string;
-            const slug = file.name.replace(/\.md$/, ''); // ファイル名から拡張子を除去してslugに
+            const slug = file.name.replace(/\.md$/, '');
 
             let title = slug; // デフォルトタイトルはslug
             try {
-                // フロントマターからタイトルを試みとして取得
                 const { data: fmData } = parseFrontMatter(content);
                 if (fmData.title) {
                     title = fmData.title;
@@ -89,11 +88,11 @@ const MarkdownFileUploader: React.FC<MarkdownFileUploaderProps> = ({ onUploadSuc
             } catch (parseError) {
                 console.warn("アップロード時のFrontmatterパースエラー（タイトル取得試行）:", parseError);
             }
-            
+
             try {
                 localStorage.setItem(`blogPost_${slug}`, content);
                 setUploadMessage(`記事 '${title}' (slug: ${slug}) をブラウザアプリ内に保存しました。`);
-                onUploadSuccess(slug, title);
+                onUploadSuccess(slug); // title を渡さないように変更
             } catch (err: any) {
                 const errorMessage = err.message || String(err);
                 setUploadMessage(`保存に失敗しました: ${errorMessage}. ローカルストレージの容量制限の可能性があります。`);
@@ -107,16 +106,16 @@ const MarkdownFileUploader: React.FC<MarkdownFileUploaderProps> = ({ onUploadSuc
             setIsUploading(false);
         };
         reader.readAsText(file);
-        event.target.value = ''; // 同じファイルを連続してアップロードできるようにリセット
+        event.target.value = '';
     };
 
     return (
-        <div className="markdown-uploader-container"> {/* CSSクラスは Preview.css で定義 */}
-            <input 
-                type="file" 
-                id="mdFileUploader" 
-                accept=".md" 
-                onChange={handleFileUpload} 
+        <div className="markdown-uploader-container">
+            <input
+                type="file"
+                id="mdFileUploader"
+                accept=".md"
+                onChange={handleFileUpload}
                 disabled={isUploading}
             />
             {isUploading && <p className="upload-status">アップロード中...</p>}
@@ -131,29 +130,30 @@ const MarkdownFileUploader: React.FC<MarkdownFileUploaderProps> = ({ onUploadSuc
 
 // --- Preview (メインコンポーネント) ---
 const Preview: React.FC = () => {
-    const { slug: currentSlugFromParams } = useParams<{ slug: string }>(); // URLから取得する現在のslug
-    const navigate = useNavigate(); // ページ遷移用フック
+    const { slug: currentSlugFromParams } = useParams<{ slug: string }>();
+    const navigate = useNavigate();
 
     const [post, setPost] = useState<SinglePost | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [uploaderKey, setUploaderKey] = useState(Date.now()); // アップローダーのメッセージをリセットするため
+    const [uploaderKey, setUploaderKey] = useState(Date.now());
+    const [authorImageHasError, setAuthorImageHasError] = useState(false); // 著者画像の読み込みエラー状態
 
-    // ローカルストレージから記事をフェッチする関数
     const fetchPostFromLocalStorage = useCallback((slugToFetch: string | undefined) => {
         if (!slugToFetch) {
             setPost(null);
             setError(null);
-            setLoading(false); // slugがない場合はローディングも完了
+            setLoading(false);
             return;
         }
 
         setLoading(true);
         setError(null);
         setPost(null);
+        // 新しい記事を読み込む前に画像エラー状態をリセット
+        setAuthorImageHasError(false);
 
-        // setTimeoutを使用して、状態更新が確実に行われた後にDOM操作や重い処理が走ることを模倣
-        // (実際にはlocalStorageアクセスは同期的だが、UX向上のためや、将来的な非同期処理への布石)
+
         setTimeout(() => {
             try {
                 const rawContent = localStorage.getItem(`blogPost_${slugToFetch}`);
@@ -177,40 +177,37 @@ const Preview: React.FC = () => {
             } finally {
                 setLoading(false);
             }
-        }, 100); // わずかな遅延（任意）
+        }, 100);
+    }, []);
 
-    }, []); // useCallbackの依存配列は空
-
-    // URLのslugが変更されたら記事を再フェッチ
     useEffect(() => {
         fetchPostFromLocalStorage(currentSlugFromParams);
     }, [currentSlugFromParams, fetchPostFromLocalStorage]);
 
-    // アップロード成功時のコールバック
-    const handleUploadSuccess = (uploadedSlug: string, uploadedTitle?: string) => {
-        // アップロードされた記事のパスに遷移
-        // (例: /preview/my-new-post) - あなたのルーティング設定に合わせてパスを調整してください
-        const basePath = "/preview"; // もしルーティングのベースパスが異なる場合は調整
-        navigate(`${basePath}/${uploadedSlug}`); 
-
-        // アップローダーのメッセージをクリアするためにキーを更新 (任意)
-        // setUploaderKey(Date.now()); 
-        // navigateが発火するとcurrentSlugFromParamsが変わりuseEffectが動くので、
-        // fetchPostFromLocalStorageが呼ばれ、記事が更新されるはず。
+    const handleUploadSuccess = (uploadedSlug: string) => {
+        const basePath = "/preview";
+        navigate(`${basePath}/${uploadedSlug}`);
+        setUploaderKey(Date.now()); // アップローダーのキーを更新してメッセージをクリア
     };
 
-    // 著者画像のパス取得 (変更なし)
     const getAuthorImagePath = (authorID?: number): string | null => {
         if (!authorID) return null;
         const imageName = 'user'+ authorID + '.jpg';
-        return `/images/${imageName}`; // publicフォルダ等、アクセス可能なパス
+        return `/images/${imageName}`;
     };
-    
+
     const authorImagePath = post?.frontmatter.authorID ? getAuthorImagePath(post.frontmatter.authorID) : null;
     const authorName = post?.frontmatter.author;
 
-    // Twitterシェア用情報 (postが存在する場合のみ生成)
-    const siteBaseUrl = 'https://omoshirokaiwai.com/blog/'; // ご自身のサイトURLに
+    // authorImagePath が変わるたびに画像エラー状態をリセット
+    useEffect(() => {
+        if (authorImagePath) {
+            setAuthorImageHasError(false);
+        }
+    }, [authorImagePath]);
+
+
+    const siteBaseUrl = 'https://omoshirokaiwai.com/blog/';
     const shareUrl = post ? `${siteBaseUrl}${post.slug}` : siteBaseUrl;
     const shareText = post?.frontmatter.title
         ? `${post.frontmatter.title}｜おもしろ界隈`
@@ -218,27 +215,24 @@ const Preview: React.FC = () => {
     const twitterShareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
 
     return (
-        <div className="preview-page-container"> {/* CSSクラスは Preview.css で定義 */}
+        <div className="preview-page-container">
             <Header />
-
-            <div className="container"> {/* 全体を囲むコンテナ */}
-                {/* Uploader Section */}
-                <section className="uploader-main-section"> {/* CSSクラスは Preview.css で定義 */}
+            <div className="container">
+                <section className="uploader-main-section">
                     <h2>マークダウン記事アップローダー</h2>
                     <p>自分のパソコンから.mdファイルをアップロードしてプレビューできます。</p>
                     <MarkdownFileUploader key={uploaderKey} onUploadSuccess={handleUploadSuccess} />
                 </section>
 
-                {/* Post Display Section */}
-                {currentSlugFromParams ? ( // URLにslugがある場合のみ記事表示を試みる
+                {currentSlugFromParams ? (
                     <main className="main-content">
                         {loading && (
-                            <div className="loading-container-inline"> {/* CSSクラスは Preview.css で定義 */}
+                            <div className="loading-container-inline">
                                 <p>記事「{currentSlugFromParams}」を読み込んでいます...</p>
                             </div>
                         )}
                         {error && !loading && (
-                            <div className="error-container-inline"> {/* CSSクラスは Preview.css で定義 */}
+                            <div className="error-container-inline">
                                 <p className="error-message">{error}</p>
                                 <Link to="/blogs" className="cta-button-secondary">ブログ一覧へ戻る</Link>
                             </div>
@@ -254,23 +248,20 @@ const Preview: React.FC = () => {
                                     )}
                                     {authorName && (
                                         <p className="post-meta author-info">
-                                            {authorImagePath  ? (
+                                            {/* 画像表示: authorImagePath があり、かつエラーがない場合 */}
+                                            {authorImagePath && !authorImageHasError && (
                                                 <img
                                                     src={authorImagePath}
                                                     alt={`${authorName}のアイコン`}
                                                     className="author-icon"
-                                                    onError={(e) => { // 元のonError処理
+                                                    onError={() => {
                                                         console.warn(`著者の画像が見つかりませんでした: ${authorImagePath}`);
-                                                        (e.target as HTMLImageElement).style.display = 'none';
-                                                        const nextSibling = (e.target as HTMLImageElement).nextElementSibling;
-                                                        if (nextSibling && nextSibling.classList.contains('default-author-icon')) { // default-author-icon があるか確認
-                                                            (nextSibling as HTMLElement).style.display = 'inline-block';
-                                                        }
+                                                        setAuthorImageHasError(true);
                                                     }}
                                                 />
-                                            ) : null}
-                                            {/* 画像がない、またはエラー時のフォールバックアイコン */}
-                                            {(!authorImagePath || (authorImagePath && document.querySelector(`img[src="${authorImagePath}"]`)?.style.display === 'none')) && (
+                                            )}
+                                            {/* デフォルトアイコン表示: authorImagePath がない、またはエラーがある場合 */}
+                                            {(!authorImagePath || authorImageHasError) && (
                                                 <span className="author-icon default-author-icon"></span>
                                             )}
                                             {authorName}
@@ -296,9 +287,9 @@ const Preview: React.FC = () => {
                                         rel="noopener noreferrer"
                                         className="cta-button-secondary twitter-share-button"
                                     >
-                                        <img 
+                                        <img
                                             className="x-share-button"
-                                            src='/images/x-twitter-brands.svg' // パス確認
+                                            src='/images/x-twitter-brands.svg'
                                             alt="Xで共有する"
                                         />
                                         共有する
@@ -306,19 +297,18 @@ const Preview: React.FC = () => {
                                 </div>
                             </article>
                         )}
-                         {/* slugはあるが、postもerrorもない場合（通常はloading中）*/}
                         {!post && !loading && !error && currentSlugFromParams && (
                              <div className="info-container">
-                                <p>記事 '{currentSlugFromParams}' のデータがありません。アップロードされているか確認してください。</p>
+                                 <p>記事 '{currentSlugFromParams}' のデータがありません。アップロードされているか確認してください。</p>
                              </div>
                         )}
                         <div className="navigation-links">
                             <Link to="/" className="cta-button-secondary">&larr; 他の記事を見る</Link>
                         </div>
                     </main>
-                ) : ( // URLにslugがない場合 (例: /preview/ でアクセス時)
+                ) : (
                     <main className="main-content">
-                        <div className="container instructions-container"> {/* CSSクラスは Preview.css で定義 */}
+                        <div className="container instructions-container">
                             <p>記事をプレビューするには、URLで記事のslugを指定するか (例: <code>/preview/your-article-slug</code>)、上記フォームから新しい記事をアップロードしてください。</p>
                         </div>
                     </main>
